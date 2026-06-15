@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+using static AmountCalculatHandler_v2;
 
 /*  Spec
  *  電商系統在結帳時，需要依據顧客身分與活動條件計算可折抵金額。
@@ -13,7 +14,7 @@ using System.Threading.Tasks;
  *  - VIP 會員可折抵訂單總金額的 10%。✔️✔️
  *
  *  產品經理已提出未來可能加入的折扣情境：
- *  - 生日會員折扣：顧客生日月份可取得額外折扣。(5%)
+ *  - 生日會員折扣：顧客生日月份可取得額外折扣。(5%)✔️
  *  - 員工折扣：員工身分可能有固定比例或固定金額折扣(15%)。
  *  - 節慶活動折扣：特定活動期間可能套用活動折扣。
  *      - 滿足某種消費模式，可進行百分比折扣(三件15%)、(特定商品 40%)
@@ -27,6 +28,8 @@ using System.Threading.Tasks;
  *  - 折扣規則應能被獨立測試，而不是全部集中在單一 if/else 或 switch 中。
  *  - 計算結果應回傳「折抵金額」，不是折扣後的應付總額。
  */
+
+#region v1
 public class AmountCalculatHandler_v1
 {
     public decimal CalculateDiscount(
@@ -46,18 +49,6 @@ decimal totalAmount)
         return 0;
     }
 }
-
-public enum CustomerType
-{
-    Regular,
-    Vip
-}
-
-public class Customer
-{
-    public CustomerType Type { get; set; }
-}
-
 
 public class UnitTests_v1 : UnitTestBase
 {
@@ -89,3 +80,104 @@ public class UnitTests_v1 : UnitTestBase
         Expect(amount * payableRate).Equal(result);
     }
 }
+#endregion v1
+
+
+public class AmountCalculatHandler_v2
+{
+    /*
+     * 這段重構需要考慮的是，如何乾淨的測試到 BirthMonth。
+     */
+
+    private readonly BirthdayDiscount _birthdayDiscount = new BirthdayDiscount();
+
+    public AmountCalculatHandler_v2()
+    {
+    }
+
+    public decimal CalculateDiscount(
+Customer customer,
+decimal totalAmount)
+    {
+        decimal payableAmount = customer.Type switch
+        {
+            CustomerType.Regular => totalAmount * 0.99m,
+            CustomerType.Vip => totalAmount * 0.90m,
+            _ => totalAmount
+        };
+
+        payableAmount = _birthdayDiscount.Apply(
+            customer,
+            payableAmount);
+
+        return payableAmount;
+    }
+
+    public class BirthdayDiscount
+    {
+        public decimal Apply(Customer customer, decimal amount)
+        {
+            return customer.IsBirthMonth
+                ? amount * 0.95m
+                : amount;
+        }
+    }
+}
+
+public class UnitTests_v2 : UnitTestBase
+{
+    public void BirthMonth_ShouldPay95PercentOfOriginalAmount()
+    {
+        var discount = new BirthdayDiscount();
+
+        var customer = new Customer
+        {
+            IsBirthMonth = true
+        };
+
+        var result = discount.Apply(customer, 1000m);
+
+        Expect(950m).Equal(result);
+    }
+    public void RegularCustomer_ShouldPay99PercentOfOriginalAmount()
+    {
+        var amountHandler = new AmountCalculatHandler_v2();
+        var customer = new Customer
+        {
+            Type = CustomerType.Regular,
+        };
+        decimal payableRate = 0.99M;
+        decimal amount = 1000;
+
+        var result = amountHandler.CalculateDiscount(customer, amount);
+        Expect(amount * payableRate).Equal(result);
+    }
+
+    public void VipCustomer_ShouldPay90PercentOfOriginalAmount()
+    {
+        var amountHandler = new AmountCalculatHandler_v2();
+        var customer = new Customer
+        {
+            Type = CustomerType.Vip,
+        };
+        decimal payableRate = 0.90M;
+        decimal amount = 1000;
+
+        var result = amountHandler.CalculateDiscount(customer, amount);
+        Expect(amount * payableRate).Equal(result);
+    }
+}
+
+public enum CustomerType
+{
+    Regular,
+    Vip
+}
+
+public class Customer
+{
+    public CustomerType Type { get; set; }
+    public bool IsBirthMonth { get; internal set; }
+}
+
+
