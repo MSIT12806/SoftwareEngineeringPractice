@@ -1,18 +1,35 @@
-﻿using System;
+﻿using SoftwareEngineeringPractice;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace SoftwareEngineeringPractice
 {
     /*  Spec
-     *  某個電商系統原本只有一般會員與 VIP 會員，產品經理說，未來可能加入：
-        - 生日會員折扣
-        - 員工折扣
-        - 節慶活動折扣
-        - 不同國家的折扣政策
-        - 可同時套用多種折扣，但有些折扣不能併用
+     *  電商系統在結帳時，需要依據顧客身分與活動條件計算可折抵金額。
+     *
+     *  目前已知規則：
+     *  - 一般會員可折抵訂單總金額的 1%。
+     *  - VIP 會員可折抵訂單總金額的 10%。
+     *  - 若顧客不符合任何折扣條件，折抵金額為 0。
+     *
+     *  產品經理已提出未來可能加入的折扣情境：
+     *  - 生日會員折扣：顧客生日月份可取得額外折扣。(5%)
+     *  - 員工折扣：員工身分可能有固定比例或固定金額折扣(15%)。
+     *  - 節慶活動折扣：特定活動期間可能套用活動折扣。
+     *      - 滿足某種消費模式，可進行百分比折扣(三件15%)、(特定商品 40%)
+     *      - 總折扣：所有折扣計算完畢的總金額，若滿足一定金額，可進行額外折扣(ex: 滿千送百)
+     *  - 多重折扣：部分折扣可同時套用，部分折扣彼此互斥，需要有明確的併用規則。
+     *      - 若已計算員工折扣，就不再計算一般會員折扣
+     *      - 節慶活動，單一訂單明細若同時符合多個節慶活動，僅套用對該明細產生實際折抵金額最高的一項活動，不得疊加多個節慶活動折扣。
+     *
+     *  設計目標：
+     *  - 新增折扣類型時，應盡量避免反覆修改既有的折扣計算流程。
+     *  - 折扣規則應能被獨立測試，而不是全部集中在單一 if/else 或 switch 中。
+     *  - 計算結果應回傳「折抵金額」，不是折扣後的應付總額。
      */
     public class AmountCalculatHandler
     {
@@ -22,7 +39,7 @@ namespace SoftwareEngineeringPractice
         {
             if (customer.Type == CustomerType.Regular)
             {
-                return totalAmount * 0.05m;
+                return totalAmount * 0.99m;
             }
 
             if (customer.Type == CustomerType.Vip)
@@ -43,5 +60,59 @@ namespace SoftwareEngineeringPractice
     public class Customer
     {
         public CustomerType Type { get; set; }
+    }
+}
+
+public static class UnitTests
+{
+    public static void RegularCustomer_ShouldPay99PercentOfOriginalAmount()
+    {
+        var amountHandler = new AmountCalculatHandler();
+        var customer = new Customer
+        {
+            Type = CustomerType.Regular,
+        };
+        decimal payableRate = 0.99M;
+        decimal amount = 1000;
+
+        var result = amountHandler.CalculateDiscount(customer, amount);
+        Expect(amount * payableRate).Equal(result);
+    }
+
+    public static void VipCustomer_ShouldPay90PercentOfOriginalAmount()
+    {
+        var amountHandler = new AmountCalculatHandler();
+        var customer = new Customer
+        {
+            Type = CustomerType.Vip,
+        };
+        decimal payableRate = 0.90M;
+        decimal amount = 1000;
+
+        var result = amountHandler.CalculateDiscount(customer, amount);
+        Expect(amount * payableRate).Equal(result);
+    }
+
+    private static ExpectObj Expect(object v)
+    {
+        return new ExpectObj { Value = v };
+    }
+
+
+    private class ExpectObj
+    {
+        public object Value { get; set; }
+
+        public void Equal(object result, [CallerMemberName] string testName = "")
+        {
+            Console.WriteLine($"Excute {testName} Test");
+            if (Value.Equals(result))
+            {
+                Console.WriteLine("Pass");
+                return;
+            }
+
+            Console.WriteLine("Fail");
+        }
     }
 }
