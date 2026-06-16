@@ -14,7 +14,7 @@ using static AmountCalculatHandler_v2;
  *  - VIP 會員可折抵訂單總金額的 10%。✔️✔️
  *
  *  產品經理已提出未來可能加入的折扣情境：
- *  - 生日會員折扣：顧客生日月份可取得額外折扣。(5%)✔️
+ *  - 生日會員折扣：顧客生日月份可取得額外折扣。(5%)✔️✔️
  *  - 員工折扣：員工身分可能有固定比例或固定金額折扣(15%)。
  *  - 節慶活動折扣：特定活動期間可能套用活動折扣。
  *      - 滿足某種消費模式，可進行百分比折扣(三件15%)、(特定商品 40%)
@@ -127,13 +127,12 @@ public class UnitTests_v2 : UnitTestBase
 {
     public void BirthMonth_ShouldPay95PercentOfOriginalAmount()
     {
-        var discount = new BirthdayDiscount();
-
         var customer = new Customer
         {
             IsBirthMonth = true
         };
 
+        var discount = new BirthdayDiscount();
         var result = discount.Apply(customer, 1000m);
 
         Expect(950m).Equal(result);
@@ -151,7 +150,6 @@ public class UnitTests_v2 : UnitTestBase
         var result = amountHandler.CalculateDiscount(customer, amount);
         Expect(amount * payableRate).Equal(result);
     }
-
     public void VipCustomer_ShouldPay90PercentOfOriginalAmount()
     {
         var amountHandler = new AmountCalculatHandler_v2();
@@ -167,6 +165,23 @@ public class UnitTests_v2 : UnitTestBase
     }
 }
 
+public class ProcessTests_v2 : UnitTestBase
+{
+    public void VipCustomerInBirthMonth_ShouldApplyVipThenBirthdayDiscount()
+    {
+        var customer = new Customer
+        {
+            Type = CustomerType.Vip,
+            IsBirthMonth = true,
+        };
+
+        var process = new AmountCalculatHandler_v2();
+        var result = process.CalculateDiscount(customer, 1000m);
+        Expect(1000m * 0.9m * 0.95m).Equal(result);
+    }
+}
+#region basic
+
 public enum CustomerType
 {
     Regular,
@@ -179,4 +194,4 @@ public class Customer
     public bool IsBirthMonth { get; internal set; }
 }
 
-
+#endregion
