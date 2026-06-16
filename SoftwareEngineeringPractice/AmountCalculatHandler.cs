@@ -46,7 +46,7 @@ decimal totalAmount)
             return totalAmount * 0.90m;
         }
 
-        return 0;
+        return totalAmount;
     }
 }
 
@@ -89,8 +89,6 @@ public class AmountCalculatHandler_v2
      * 這段重構需要考慮的是，如何乾淨的測試到 BirthMonth。
      */
 
-    private readonly BirthdayDiscount _birthdayDiscount = new BirthdayDiscount();
-
     public AmountCalculatHandler_v2()
     {
     }
@@ -106,6 +104,7 @@ decimal totalAmount)
             _ => totalAmount
         };
 
+        BirthdayDiscount _birthdayDiscount = new BirthdayDiscount();
         payableAmount = _birthdayDiscount.Apply(
             customer,
             payableAmount);
