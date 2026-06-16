@@ -15,12 +15,12 @@ using static AmountCalculatHandler_v2;
  *
  *  產品經理已提出未來可能加入的折扣情境：
  *  - 生日會員折扣：顧客生日月份可取得額外折扣。(5%)✔️✔️
- *  - 員工折扣：員工身分可能有固定比例或固定金額折扣(15%)。
+ *  - 員工折扣：員工身分可能有固定比例折扣(15%)。✔️✔️
+ *      - 若已計算員工折扣，就不再計算一般會員折扣✔️✔️
  *  - 節慶活動折扣：特定活動期間可能套用活動折扣。
  *      - 滿足某種消費模式，可進行百分比折扣(三件15%)、(特定商品 40%)
  *      - 總折扣：所有折扣計算完畢的總金額，若滿足一定金額，可進行額外折扣(ex: 滿千送百)
  *  - 多重折扣：部分折扣可同時套用，部分折扣彼此互斥，需要有明確的併用規則。
- *      - 若已計算員工折扣，就不再計算一般會員折扣
  *      - 節慶活動，單一訂單明細若同時符合多個節慶活動，僅套用對該明細產生實際折抵金額最高的一項活動，不得疊加多個節慶活動折扣。
  *
  *  設計目標：
@@ -82,7 +82,7 @@ public class UnitTests_v1 : UnitTestBase
 }
 #endregion v1
 
-
+#region v2
 public class AmountCalculatHandler_v2
 {
     /*
@@ -110,16 +110,6 @@ decimal totalAmount)
             payableAmount);
 
         return payableAmount;
-    }
-
-    public class BirthdayDiscount
-    {
-        public decimal Apply(Customer customer, decimal amount)
-        {
-            return customer.IsBirthMonth
-                ? amount * 0.95m
-                : amount;
-        }
     }
 }
 
@@ -180,8 +170,190 @@ public class ProcessTests_v2 : UnitTestBase
         Expect(1000m * 0.9m * 0.95m).Equal(result);
     }
 }
-#region basic
 
+#endregion v2
+
+#region v3
+public class AmountCalculatHandler_v3
+{
+    /*
+     * 這段重構需要考慮的是，如何乾淨的測試到 Employee，以及 Employee 跟一般會員的影響。
+     */
+
+    public AmountCalculatHandler_v3()
+    {
+    }
+
+    public decimal CalculateDiscount(
+Customer customer,
+decimal totalAmount)
+    {
+        CustomerDiscount customerDiscount = new CustomerDiscount();
+        decimal payableAmount = customerDiscount.Apply(customer, totalAmount);
+
+        EmplyeeDiscount emplyeeDiscount = new EmplyeeDiscount();
+        payableAmount = emplyeeDiscount.Apply(customer, payableAmount);
+
+        BirthdayDiscount birthdayDiscount = new BirthdayDiscount();
+        payableAmount = birthdayDiscount.Apply(
+            customer,
+            payableAmount);
+
+        return payableAmount;
+    }
+}
+
+public class UnitTests_v3 : UnitTestBase
+{
+    public void Employee_ShouldPay85PercentOfOriginalAmount()
+    {
+        var customer = new Customer
+        {
+            IsEmplyee = true,
+        };
+
+        var discount = new EmplyeeDiscount();
+        var result = discount.Apply(customer, 1000m);
+        Expect(1000m * 0.85m).Equal(result);
+    }
+    public void BirthMonth_ShouldPay95PercentOfOriginalAmount()
+    {
+        var customer = new Customer
+        {
+            IsBirthMonth = true
+        };
+
+        var discount = new BirthdayDiscount();
+        var result = discount.Apply(customer, 1000m);
+
+        Expect(950m).Equal(result);
+    }
+    public void RegularCustomer_ShouldPay99PercentOfOriginalAmount()
+    {
+        var amountHandler = new AmountCalculatHandler_v3();
+        var customer = new Customer
+        {
+            Type = CustomerType.Regular,
+        };
+        decimal payableRate = 0.99M;
+        decimal amount = 1000;
+
+        var result = amountHandler.CalculateDiscount(customer, amount);
+        Expect(amount * payableRate).Equal(result);
+    }
+    public void VipCustomer_ShouldPay90PercentOfOriginalAmount()
+    {
+        var amountHandler = new AmountCalculatHandler_v3();
+        var customer = new Customer
+        {
+            Type = CustomerType.Vip,
+        };
+        decimal payableRate = 0.90M;
+        decimal amount = 1000;
+
+        var result = amountHandler.CalculateDiscount(customer, amount);
+        Expect(amount * payableRate).Equal(result);
+    }
+}
+
+public class ProcessTests_v3 : UnitTestBase
+{
+    public void Emplyee_ShouldGetVipCustomerDiscountAndBirthMonthDiscount() {
+        var c = new Customer
+        {
+            Type = CustomerType.Vip,
+            IsEmplyee = true,
+            IsBirthMonth = true,
+        };
+
+        var process = new AmountCalculatHandler_v3();
+        var result = process.CalculateDiscount(c, 1000m);
+        Expect(1000m * 0.9m * 0.85m * 0.95m).Equal(result);
+    }
+    public void Emplyee_ShouldGetVipCustomerDiscount() {
+
+        var c = new Customer
+        {
+            Type = CustomerType.Vip,
+            IsEmplyee = true,
+            IsBirthMonth = false,
+        };
+
+        var process = new AmountCalculatHandler_v3();
+        var result = process.CalculateDiscount(c, 1000m);
+        Expect(1000m * 0.9m * 0.85m ).Equal(result);
+    }
+    public void Emplyee_ShouldNotGetGeneralCustomerDiscount()
+    {
+
+        var c = new Customer
+        {
+            Type = CustomerType.Regular,
+            IsEmplyee = true,
+            IsBirthMonth = false,
+        };
+
+        var process = new AmountCalculatHandler_v3();
+        var result = process.CalculateDiscount(c, 1000m);
+        Expect(1000m * 0.85m).Equal(result);
+    }
+    public void VipCustomerInBirthMonth_ShouldApplyVipThenBirthdayDiscount()
+    {
+        var customer = new Customer
+        {
+            Type = CustomerType.Vip,
+            IsBirthMonth = true,
+        };
+
+        var process = new AmountCalculatHandler_v3();
+        var result = process.CalculateDiscount(customer, 1000m);
+        Expect(1000m * 0.9m * 0.95m).Equal(result);
+    }
+}
+#endregion v3
+#region basic
+public class CustomerDiscount
+{
+    public decimal Apply(Customer customer, decimal totalAmount)
+    {
+        switch (customer.Type)
+        {
+            case CustomerType.Regular:
+                if (customer.IsEmplyee)
+                {
+                    return totalAmount;
+                }
+                return totalAmount * 0.99m;
+
+            case CustomerType.Vip:
+                return totalAmount * 0.9m;
+
+            default:
+                return totalAmount;
+        }
+    }
+}
+public class EmplyeeDiscount
+{
+    public decimal Apply(Customer customer, decimal amount)
+    {
+        if (customer.IsEmplyee)
+        {
+            return amount * 0.85m;
+        }
+
+        return amount;
+    }
+}
+public class BirthdayDiscount
+{
+    public decimal Apply(Customer customer, decimal amount)
+    {
+        return customer.IsBirthMonth
+            ? amount * 0.95m
+            : amount;
+    }
+}
 public enum CustomerType
 {
     Regular,
@@ -192,6 +364,7 @@ public class Customer
 {
     public CustomerType Type { get; set; }
     public bool IsBirthMonth { get; internal set; }
+    public bool IsEmplyee { get; internal set; }
 }
 
 #endregion
