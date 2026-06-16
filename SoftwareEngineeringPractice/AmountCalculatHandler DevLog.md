@@ -1,5 +1,9 @@
 # AmountCalculatHandler 心路歷程
 
+## V1
+
+
+
 > 折扣計算沒有脫離業務語意的「最優通用解」，
 > 只有在某一套明確的計價語言、計算階段與衝突規則下，比較合適的模型。
 
@@ -7,6 +11,59 @@
 
 ---
 
+## V2
+
+
+
 > TDD 能夠保護**內部實作變化**的重構，但如果改到的是**對外提供服務的方式**(contract)，就無法保護。
 
 這時候可以先增加新的方法，但保留舊方法，用穩定的舊方法，去測試新方法，直到新方法也足夠穩定，再把舊方法改移除掉。
+
+> 對 production code 重構的過程中，也會逐漸顯露出業務領域的語言和一些特徵。
+
+我想分享一下，production code 從 V1 演變到 V2 的變化：
+
+V1
+
+```C#
+    public decimal CalculateDiscount(
+Customer customer,
+decimal totalAmount)
+    {
+        if (customer.Type == CustomerType.Regular)
+        {
+            return totalAmount * 0.99m;
+        }
+
+        if (customer.Type == CustomerType.Vip)
+        {
+            return totalAmount * 0.90m;
+        }
+
+        return totalAmount;
+    }
+```
+
+V2
+
+```C#
+    public decimal CalculateDiscount(
+Customer customer,
+decimal totalAmount)
+    {
+        decimal payableAmount = customer.Type switch
+        {
+            CustomerType.Regular => totalAmount * 0.99m,
+            CustomerType.Vip => totalAmount * 0.90m,
+            _ => totalAmount
+        };
+
+        BirthdayDiscount _birthdayDiscount = new BirthdayDiscount();
+        payableAmount = _birthdayDiscount.Apply(
+            customer,
+            payableAmount);
+
+        return payableAmount;
+    }
+```
+
