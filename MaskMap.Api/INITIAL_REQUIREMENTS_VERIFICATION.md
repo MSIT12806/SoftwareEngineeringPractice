@@ -139,6 +139,24 @@ Response:
 
 ## 2.4 建立預約
 
+初始需求真正要求的是：
+
+```text
+Client 因 timeout 或 retry 重送同一個預約操作時，不可造成重複預約、重複扣庫存或重複占用額度。
+```
+
+第一版 API 規格先保留 `Idempotency-Key` 作為建議做法，但它不是唯一可接受設計。
+
+可接受的替代設計包含：
+
+- Client 提供 `Idempotency-Key`。
+- Client 提供 `ClientOperationId` 欄位。
+- Server 先建立 reservation operation，再由 client 查詢 operation 狀態。
+- 使用自然唯一鍵限制同一使用者同一期間只能有一筆有效預約。
+- 其他能證明「同一操作重送不會重複生效」的設計。
+
+若實作不使用 `Idempotency-Key` header，需在 API 文件中明確定義採用哪一種重送防護機制，並調整 IR-005 / IR-006 的測試輸入。
+
 ```http
 POST /api/reservations
 X-Test-User-Id: user-001
@@ -223,6 +241,16 @@ Request:
 ---
 
 ## 2.5 查詢預約操作結果
+
+此 API 是建議設計，不是初始需求的唯一解。
+
+它用來處理：
+
+```text
+Server 已 commit，但 response 在網路途中遺失，Client 不知道預約是否成功。
+```
+
+如果實作採用其他方式讓 Client 查得出重送結果，例如直接查有效預約或查 `ClientOperationId`，也可以滿足需求。
 
 ```http
 GET /api/reservation-operations/11111111-1111-1111-1111-111111111111
@@ -765,11 +793,26 @@ Integration
 
 ---
 
-## IR-005 同一 Idempotency Key 重送不可重複預約
+## IR-005 同一預約操作重送不可重複預約
 
 需求來源：
 
 - `1.5 可恢復性`：相同請求可能因重試而重複送達
+
+驗證目的：
+
+```text
+不管實作是否使用 Idempotency Key，只要 Client 重送同一個預約操作，
+系統就不可重複建立預約、重複扣庫存或重複占用額度。
+```
+
+預設測試版本使用 `Idempotency-Key` 表達「同一操作」。
+
+若 production design 不採用 `Idempotency-Key`，此案例應改用該設計的操作識別方式，例如：
+
+- `ClientOperationId`
+- reservation operation resource
+- 同一使用者同一期間有效預約唯一約束
 
 步驟：
 
@@ -783,7 +826,7 @@ Integration
 - 系統只建立一筆 `Reservation`。
 - 庫存只扣 1 次。
 - 額度只占用 1 次。
-- `IdempotencyRecord` 只有一筆或只有一筆有效紀錄。
+- 若實作有操作紀錄，該操作應只有一筆成功結果。
 
 測試類型：
 
@@ -793,12 +836,27 @@ Integration
 
 ---
 
-## IR-006 同一 Idempotency Key 搭配不同內容需回傳衝突
+## IR-006 同一操作識別不可被不同請求內容重用
 
 需求來源：
 
 - `1.5 可恢復性`
 - `1.5 可稽核性`：同一個操作是否曾被重試
+
+驗證目的：
+
+```text
+如果系統提供「操作識別」來支援重送防護，則同一操作識別不可被拿來代表兩個不同預約意圖。
+```
+
+此案例只適用於使用 `Idempotency-Key`、`ClientOperationId` 或 reservation operation resource 的設計。
+
+如果實作完全不提供 client-visible operation id，而是只靠自然唯一鍵防止重複有效預約，則此案例可以改成：
+
+```text
+同一使用者在同一額度週期內已存在有效預約時，再預約另一間藥局應回傳明確衝突，
+且不可額外扣庫存或額度。
+```
 
 步驟：
 
