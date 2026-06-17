@@ -1,0 +1,6 @@
+@MaskMap.Api_HostAddress = http://localhost:5021
+
+GET {{MaskMap.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
