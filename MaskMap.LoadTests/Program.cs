@@ -1,13 +1,15 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using NBomber.CSharp;
+using Testcontainers.MsSql;
 
 const int defaultContenderCount = 10_000;
 const int defaultStock = 100;
 const int defaultRequestsPerSecond = 1_000;
 
-var baseUrl = Environment.GetEnvironmentVariable("MASKMAP_API_BASE_URL")
-    ?? "http://localhost:5000";
 var contenderCount = ReadPositiveInt("MASKMAP_CONTENDER_COUNT", defaultContenderCount);
 var stock = ReadPositiveInt("MASKMAP_STOCK", defaultStock);
 var requestsPerSecond = ReadPositiveInt(
@@ -19,11 +21,32 @@ if (stock > contenderCount)
     throw new InvalidOperationException("MASKMAP_STOCK cannot exceed MASKMAP_CONTENDER_COUNT.");
 }
 
+var repositoryRoot = FindRepositoryRoot();
+var port = GetAvailableTcpPort();
+var baseUrl = $"http://127.0.0.1:{port}";
+
+Console.WriteLine("Starting SQL Server Testcontainer...");
+await using var sqlServer = new MsSqlBuilder(
+        "mcr.microsoft.com/mssql/server:2022-latest")
+    .Build();
+await sqlServer.StartAsync();
+
+var connectionString = sqlServer.GetConnectionString() +
+                       ";Initial Catalog=MaskMapLoadTests";
+
+Console.WriteLine($"Starting MaskMap.Api at {baseUrl}...");
+using var apiProcess = ManagedApiProcess.Start(
+    repositoryRoot,
+    baseUrl,
+    connectionString);
+
 using var httpClient = new HttpClient
 {
     BaseAddress = new Uri(baseUrl),
     Timeout = TimeSpan.FromSeconds(30)
 };
+
+await WaitForApiAsync(httpClient, apiProcess, TimeSpan.FromSeconds(30));
 
 var prepareResponse = await httpClient.PostAsJsonAsync(
     "/api/test/last-inventory-competition/prepare",
@@ -142,6 +165,83 @@ static int ReadPositiveInt(string name, int defaultValue)
     return value;
 }
 
+static string FindRepositoryRoot()
+{
+    var candidates = new[]
+    {
+        Directory.GetCurrentDirectory(),
+        AppContext.BaseDirectory
+    };
+
+    foreach (var candidate in candidates)
+    {
+        var directory = new DirectoryInfo(candidate);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(
+                    directory.FullName,
+                    "MaskMap.Api",
+                    "MaskMap.Api.csproj")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+    }
+
+    throw new DirectoryNotFoundException(
+        "Could not find the repository root containing MaskMap.Api/MaskMap.Api.csproj.");
+}
+
+static int GetAvailableTcpPort()
+{
+    var listener = new TcpListener(IPAddress.Loopback, 0);
+    listener.Start();
+    var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+    listener.Stop();
+    return port;
+}
+
+static async Task WaitForApiAsync(
+    HttpClient client,
+    ManagedApiProcess apiProcess,
+    TimeSpan timeout)
+{
+    var deadline = DateTimeOffset.UtcNow.Add(timeout);
+
+    while (DateTimeOffset.UtcNow < deadline)
+    {
+        if (apiProcess.HasExited)
+        {
+            throw new InvalidOperationException(
+                "MaskMap.Api exited before becoming ready." +
+                Environment.NewLine +
+                apiProcess.GetRecentOutput());
+        }
+
+        try
+        {
+            using var response = await client.GetAsync("/swagger/index.html");
+            if (response.IsSuccessStatusCode)
+            {
+                return;
+            }
+        }
+        catch (HttpRequestException)
+        {
+            // Kestrel is still starting.
+        }
+
+        await Task.Delay(200);
+    }
+
+    throw new TimeoutException(
+        "MaskMap.Api did not become ready within the configured timeout." +
+        Environment.NewLine +
+        apiProcess.GetRecentOutput());
+}
+
 static async Task EnsureSuccessAsync(HttpResponseMessage response, string operation)
 {
     if (response.IsSuccessStatusCode)
@@ -171,3 +271,93 @@ internal sealed record CompetitionState(
     int ReservedQuantity,
     int ReservationCount,
     int OccupiedQuota);
+
+internal sealed class ManagedApiProcess : IDisposable
+{
+    private const int MaximumCapturedLines = 100;
+    private readonly Process _process;
+    private readonly ConcurrentQueue<string> _output = new();
+
+    private ManagedApiProcess(Process process)
+    {
+        _process = process;
+        _process.OutputDataReceived += CaptureOutput;
+        _process.ErrorDataReceived += CaptureOutput;
+        _process.BeginOutputReadLine();
+        _process.BeginErrorReadLine();
+    }
+
+    public bool HasExited => _process.HasExited;
+
+    public static ManagedApiProcess Start(
+        string repositoryRoot,
+        string baseUrl,
+        string connectionString)
+    {
+#if DEBUG
+        const string configuration = "Debug";
+#else
+        const string configuration = "Release";
+#endif
+        var apiDirectory = Path.Combine(repositoryRoot, "MaskMap.Api");
+        var apiAssembly = Path.Combine(
+            apiDirectory,
+            "bin",
+            configuration,
+            "net8.0",
+            "MaskMap.Api.dll");
+
+        if (!File.Exists(apiAssembly))
+        {
+            throw new FileNotFoundException(
+                "MaskMap.Api was not built for the current configuration.",
+                apiAssembly);
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            WorkingDirectory = apiDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        startInfo.ArgumentList.Add(apiAssembly);
+        startInfo.ArgumentList.Add("--urls");
+        startInfo.ArgumentList.Add(baseUrl);
+        startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        startInfo.Environment["ConnectionStrings__DefaultConnection"] = connectionString;
+
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Failed to start MaskMap.Api.");
+        return new ManagedApiProcess(process);
+    }
+
+    public string GetRecentOutput() => string.Join(Environment.NewLine, _output);
+
+    public void Dispose()
+    {
+        if (!_process.HasExited)
+        {
+            _process.Kill(entireProcessTree: true);
+            _process.WaitForExit(TimeSpan.FromSeconds(10));
+        }
+
+        _process.Dispose();
+    }
+
+    private void CaptureOutput(object sender, DataReceivedEventArgs eventArgs)
+    {
+        if (eventArgs.Data is null)
+        {
+            return;
+        }
+
+        _output.Enqueue(eventArgs.Data);
+        while (_output.Count > MaximumCapturedLines)
+        {
+            _output.TryDequeue(out _);
+        }
+    }
+}

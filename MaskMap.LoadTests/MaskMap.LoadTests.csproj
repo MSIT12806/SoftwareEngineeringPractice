@@ -9,6 +9,12 @@
 
   <ItemGroup>
     <PackageReference Include="NBomber" Version="6.0.2" />
+    <PackageReference Include="Testcontainers.MsSql" Version="4.12.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MaskMap.Api\MaskMap.Api.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
