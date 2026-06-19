@@ -5,8 +5,6 @@ VisualStudioVersion = 17.14.37314.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SoftwareEngineeringPractice", "SoftwareEngineeringPractice\SoftwareEngineeringPractice.csproj", "{C85B705F-0069-4BAA-9F41-D25CB4ED96C7}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-00C04F79EFBC}") = "MaskMap", "MaskMap", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MaskMap.Api", "MaskMap.Api\MaskMap.Api.csproj", "{FC585188-8EE2-463E-A2A9-E674BFF78D79}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MaskMap.AcceptanceTests", "MaskMap.AcceptanceTests\MaskMap.AcceptanceTests.csproj", "{B4EF29A3-3C8C-41F8-BA80-69E0F6DB1E2A}"
@@ -38,11 +36,6 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{FC585188-8EE2-463E-A2A9-E674BFF78D79} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
-		{B4EF29A3-3C8C-41F8-BA80-69E0F6DB1E2A} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
-		{6C238546-9B27-4CDF-976B-45EF92A4AC8C} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5DFEEF66-A59B-448C-B067-D1EF655456A7}
