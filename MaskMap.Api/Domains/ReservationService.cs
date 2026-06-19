@@ -18,7 +18,19 @@ namespace MaskMap.Api.Domains
                 .AsNoTracking()
                 .SingleOrDefaultAsync(
                     reservation => reservation.ReservationId == id,
-                    cancellationToken);
+                cancellationToken);
+        }
+
+        public Task<List<Reservation>> GetForUserAsync(
+            string userId,
+            CancellationToken cancellationToken)
+        {
+            return _db.Reservations
+                .AsNoTracking()
+                .Where(reservation => reservation.UserId == userId)
+                .OrderByDescending(reservation => reservation.ExpiresAt)
+                .ThenBy(reservation => reservation.ReservationId)
+                .ToListAsync(cancellationToken);
         }
 
         public async Task<Reservation> CreateAsync(
