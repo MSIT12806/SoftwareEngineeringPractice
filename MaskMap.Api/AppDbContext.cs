@@ -8,6 +8,7 @@ namespace MaskMap.Api
         DbSet<Pharmacy> Pharmacies { get; }
         DbSet<Inventory> Inventories { get; }
         DbSet<Reservation> Reservations { get; }
+        DbSet<ReservationOperation> ReservationOperations { get; }
         DbSet<UserQuota> UserQuotas { get; }
     }
 
@@ -21,6 +22,7 @@ namespace MaskMap.Api
         public DbSet<Pharmacy> Pharmacies => Set<Pharmacy>();
         public DbSet<Inventory> Inventories => Set<Inventory>();
         public DbSet<Reservation> Reservations => Set<Reservation>();
+        public DbSet<ReservationOperation> ReservationOperations => Set<ReservationOperation>();
         public DbSet<UserQuota> UserQuotas => Set<UserQuota>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -180,6 +182,50 @@ namespace MaskMap.Api
 
                 entity.Property(quota => quota.PurchasedQuantity)
                     .IsRequired();
+            });
+
+            modelBuilder.Entity<ReservationOperation>(entity =>
+            {
+                entity.ToTable("ReservationOperations", table => table.HasCheckConstraint(
+                    "CK_ReservationOperations_Quantity_Positive",
+                    "[Quantity] > 0"));
+
+                entity.HasKey(operation => new
+                {
+                    operation.UserId,
+                    operation.IdempotencyKey
+                });
+
+                entity.Property(operation => operation.UserId)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(operation => operation.IdempotencyKey)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(operation => operation.PharmacyId)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(operation => operation.ProductId)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(operation => operation.Quantity)
+                    .IsRequired();
+
+                entity.Property(operation => operation.ReservationId)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(operation => operation.CreatedAt)
+                    .IsRequired();
+
+                entity.HasOne<Reservation>()
+                    .WithMany()
+                    .HasForeignKey(operation => operation.ReservationId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

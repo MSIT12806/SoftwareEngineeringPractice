@@ -32,12 +32,23 @@ namespace MaskMap.Api.Controllers
                 return BadRequest(new { Code = "UserIdRequired", Message = "User id is required." });
             }
 
+            if (!Request.Headers.TryGetValue("Idempotency-Key", out var idempotencyKey) ||
+                string.IsNullOrWhiteSpace(idempotencyKey))
+            {
+                return BadRequest(new
+                {
+                    Code = "IdempotencyKeyRequired",
+                    Message = "Idempotency key is required."
+                });
+            }
+
             Reservation reservation;
 
             try
             {
                 reservation = await _reservationService.CreateAsync(
                     userId.ToString(),
+                    idempotencyKey.ToString(),
                     request.PharmacyId,
                     request.ProductId,
                     request.Quantity,

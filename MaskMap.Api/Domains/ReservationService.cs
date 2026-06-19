@@ -23,6 +23,7 @@ namespace MaskMap.Api.Domains
 
         public async Task<Reservation> CreateAsync(
             string userId,
+            string idempotencyKey,
             string pharmacyId,
             string productId,
             int quantity,
@@ -38,9 +39,36 @@ namespace MaskMap.Api.Domains
                 throw new ArgumentOutOfRangeException(nameof(quantity), "Quantity must be positive.");
             }
 
+            if (string.IsNullOrWhiteSpace(idempotencyKey))
+            {
+                throw new ArgumentException("Idempotency key is required.", nameof(idempotencyKey));
+            }
+
             await using var transaction = await _db.Database.BeginTransactionAsync(
                 IsolationLevel.Serializable,
                 cancellationToken);
+
+            var existingOperation = await _db.ReservationOperations
+                .SingleOrDefaultAsync(
+                    operation => operation.UserId == userId &&
+                                 operation.IdempotencyKey == idempotencyKey,
+                    cancellationToken);
+
+            if (existingOperation is not null)
+            {
+                if (existingOperation.PharmacyId != pharmacyId ||
+                    existingOperation.ProductId != productId ||
+                    existingOperation.Quantity != quantity)
+                {
+                    throw new ReservationConflictException(
+                        "IdempotencyKeyConflict",
+                        "The idempotency key was already used with a different request body.");
+                }
+
+                return await _db.Reservations.SingleAsync(
+                    reservation => reservation.ReservationId == existingOperation.ReservationId,
+                    cancellationToken);
+            }
 
             var quota = await _db.UserQuotas.SingleOrDefaultAsync(
                 item => item.UserId == userId,
@@ -83,6 +111,16 @@ namespace MaskMap.Api.Domains
             };
 
             _db.Reservations.Add(reservation);
+            _db.ReservationOperations.Add(new ReservationOperation
+            {
+                UserId = userId,
+                IdempotencyKey = idempotencyKey,
+                PharmacyId = pharmacyId,
+                ProductId = productId,
+                Quantity = quantity,
+                ReservationId = reservation.ReservationId,
+                CreatedAt = now
+            });
 
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
