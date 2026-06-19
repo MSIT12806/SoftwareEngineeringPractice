@@ -32,12 +32,25 @@ namespace MaskMap.Api.Controllers
                 return BadRequest(new { Code = "UserIdRequired", Message = "User id is required." });
             }
 
-            var reservation = await _reservationService.CreateAsync(
-                userId.ToString(),
-                request.PharmacyId,
-                request.ProductId,
-                request.Quantity,
-                cancellationToken);
+            Reservation reservation;
+
+            try
+            {
+                reservation = await _reservationService.CreateAsync(
+                    userId.ToString(),
+                    request.PharmacyId,
+                    request.ProductId,
+                    request.Quantity,
+                    cancellationToken);
+            }
+            catch (ReservationConflictException exception)
+            {
+                return Conflict(new
+                {
+                    exception.Code,
+                    exception.Message
+                });
+            }
 
             return CreatedAtAction(
                 nameof(GetById),

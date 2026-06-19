@@ -49,7 +49,9 @@ namespace MaskMap.Api.Domains
             if (quota is null ||
                 quota.Limit - quota.ReservedQuantity - quota.PurchasedQuantity < quantity)
             {
-                throw new InvalidOperationException("QuotaExceeded");
+                throw new ReservationConflictException(
+                    "QuotaExceeded",
+                    "The user does not have enough quota for this reservation.");
             }
 
             var inventory = await _db.Inventories.SingleOrDefaultAsync(
@@ -58,7 +60,9 @@ namespace MaskMap.Api.Domains
 
             if (inventory is null || inventory.AvailableQuantity < quantity)
             {
-                throw new InvalidOperationException("InventoryInsufficient");
+                throw new ReservationConflictException(
+                    "InventoryInsufficient",
+                    "The pharmacy does not have enough inventory for this reservation.");
             }
 
             var now = DateTimeOffset.UtcNow;
