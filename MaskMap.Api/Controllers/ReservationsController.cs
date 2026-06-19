@@ -8,6 +8,12 @@ namespace MaskMap.Api.Controllers
     public class ReservationsController : ControllerBase
     {
         private readonly ReservationDomainService _reservationDomainService;
+
+        public ReservationsController(ReservationDomainService reservationDomainService)
+        {
+            _reservationDomainService = reservationDomainService;
+        }
+
         [HttpGet("{id}")]
         public IActionResult GetById(string id)
         {

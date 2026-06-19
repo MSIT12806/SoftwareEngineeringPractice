@@ -5,6 +5,11 @@ namespace MaskMap.Api.Domains
     public class ReservationDomainService
     {
         private readonly IDb _db;
+
+        public ReservationDomainService(IDb db)
+        {
+            _db = db;
+        }
         public Reservation GetById(string id)
         {
             throw new NotImplementedException();
