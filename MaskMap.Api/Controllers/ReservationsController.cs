@@ -4,27 +4,45 @@ using Microsoft.AspNetCore.Mvc;
 namespace MaskMap.Api.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/reservations")]
     public class ReservationsController : ControllerBase
     {
-        private readonly ReservationDomainService _reservationDomainService;
+        private readonly ReservationService _reservationService;
 
-        public ReservationsController(ReservationDomainService reservationDomainService)
+        public ReservationsController(ReservationService reservationService)
         {
-            _reservationDomainService = reservationDomainService;
+            _reservationService = reservationService;
         }
 
         [HttpGet("{id}")]
-        public IActionResult GetById(string id)
+        public async Task<IActionResult> GetById(string id, CancellationToken cancellationToken)
         {
-            var reservation = _reservationDomainService.GetById(id);
-            return Ok(reservation);
+            var reservation = await _reservationService.GetByIdAsync(id, cancellationToken);
+            return reservation is null ? NotFound() : Ok(reservation);
         }
+
         [HttpPost]
-        public IActionResult Create([FromBody] ReservationRequest req)
+        public async Task<IActionResult> Create(
+            [FromBody] ReservationRequest request,
+            CancellationToken cancellationToken)
         {
-            var reservation = _reservationDomainService.Create(req);
-            return CreatedAtAction(nameof(GetById), new { reservation.ReservationId }, reservation);
+            if (!Request.Headers.TryGetValue("X-Test-User-Id", out var userId) ||
+                string.IsNullOrWhiteSpace(userId))
+            {
+                return BadRequest(new { Code = "UserIdRequired", Message = "User id is required." });
+            }
+
+            var reservation = await _reservationService.CreateAsync(
+                userId.ToString(),
+                request.PharmacyId,
+                request.ProductId,
+                request.Quantity,
+                cancellationToken);
+
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = reservation.ReservationId },
+                reservation);
         }
     }
 }

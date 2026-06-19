@@ -59,12 +59,24 @@ public sealed class AppDbContextMsSqlContainerTests
         {
             PharmacyId = "pharmacy-001",
             ProductId = "mask-adult",
-            AvailableQuantity = 10
+            AvailableQuantity = 10,
+            ReservedQuantity = 0,
+            PhysicalQuantity = 10,
+            LastUpdatedAt = DateTimeOffset.UtcNow
+        });
+
+        db.UserQuotas.Add(new UserQuota
+        {
+            UserId = "user-001",
+            Limit = 3,
+            ReservedQuantity = 0,
+            PurchasedQuantity = 0
         });
 
         db.Reservations.Add(new Reservation
         {
             ReservationId = "reservation-001",
+            UserId = "user-001",
             Status = "Reserved",
             PharmacyId = "pharmacy-001",
             ProductId = "mask-adult",

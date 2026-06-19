@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MaskMap.Api.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("api/pharmacies")]
     public class PharmaciesController : ControllerBase
     {
         [HttpGet]
@@ -14,11 +14,20 @@ namespace MaskMap.Api.Controllers
         }
 
         [HttpGet("{pharmacyId}/inventories")]
-        public IEnumerable<Inventory> GetInventories(string pharmacyId, [FromServices] InventoryQueryHandler inventoryQueryHandler)
+        public async Task<IActionResult> GetInventories(
+            string pharmacyId,
+            [FromServices] InventoryQueryHandler inventoryQueryHandler,
+            CancellationToken cancellationToken)
         {
-            var inventories = inventoryQueryHandler.GetInventoriesBy(pharmacyId);
+            var inventories = await inventoryQueryHandler.GetInventoriesByAsync(
+                pharmacyId,
+                cancellationToken);
 
-            return inventories;
+            return Ok(new
+            {
+                PharmacyId = pharmacyId,
+                Items = inventories
+            });
         }
     }
 }

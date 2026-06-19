@@ -8,6 +8,7 @@ namespace MaskMap.Api
         DbSet<Pharmacy> Pharmacies { get; }
         DbSet<Inventory> Inventories { get; }
         DbSet<Reservation> Reservations { get; }
+        DbSet<UserQuota> UserQuotas { get; }
     }
 
     public class AppDbContext : DbContext, IDb
@@ -20,6 +21,7 @@ namespace MaskMap.Api
         public DbSet<Pharmacy> Pharmacies => Set<Pharmacy>();
         public DbSet<Inventory> Inventories => Set<Inventory>();
         public DbSet<Reservation> Reservations => Set<Reservation>();
+        public DbSet<UserQuota> UserQuotas => Set<UserQuota>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -52,9 +54,18 @@ namespace MaskMap.Api
 
             modelBuilder.Entity<Inventory>(entity =>
             {
-                entity.ToTable("Inventories", table => table.HasCheckConstraint(
-                    "CK_Inventories_AvailableQuantity_NonNegative",
-                    "[AvailableQuantity] >= 0"));
+                entity.ToTable("Inventories", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_Inventories_AvailableQuantity_NonNegative",
+                        "[AvailableQuantity] >= 0");
+                    table.HasCheckConstraint(
+                        "CK_Inventories_ReservedQuantity_NonNegative",
+                        "[ReservedQuantity] >= 0");
+                    table.HasCheckConstraint(
+                        "CK_Inventories_PhysicalQuantity_NonNegative",
+                        "[PhysicalQuantity] >= 0");
+                });
 
                 entity.HasKey(inventory => new { inventory.PharmacyId, inventory.ProductId });
 
@@ -67,6 +78,15 @@ namespace MaskMap.Api
                     .IsRequired();
 
                 entity.Property(inventory => inventory.AvailableQuantity)
+                    .IsRequired();
+
+                entity.Property(inventory => inventory.ReservedQuantity)
+                    .IsRequired();
+
+                entity.Property(inventory => inventory.PhysicalQuantity)
+                    .IsRequired();
+
+                entity.Property(inventory => inventory.LastUpdatedAt)
                     .IsRequired();
 
                 entity.HasOne<Pharmacy>()
@@ -84,6 +104,10 @@ namespace MaskMap.Api
                 entity.HasKey(reservation => reservation.ReservationId);
 
                 entity.Property(reservation => reservation.ReservationId)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(reservation => reservation.UserId)
                     .HasMaxLength(50)
                     .IsRequired();
 
@@ -122,6 +146,40 @@ namespace MaskMap.Api
                     reservation.Status,
                     reservation.ExpiresAt
                 });
+            });
+
+            modelBuilder.Entity<UserQuota>(entity =>
+            {
+                entity.ToTable("UserQuotas", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_UserQuotas_Limit_NonNegative",
+                        "[Limit] >= 0");
+                    table.HasCheckConstraint(
+                        "CK_UserQuotas_ReservedQuantity_NonNegative",
+                        "[ReservedQuantity] >= 0");
+                    table.HasCheckConstraint(
+                        "CK_UserQuotas_PurchasedQuantity_NonNegative",
+                        "[PurchasedQuantity] >= 0");
+                    table.HasCheckConstraint(
+                        "CK_UserQuotas_Usage_WithinLimit",
+                        "[ReservedQuantity] + [PurchasedQuantity] <= [Limit]");
+                });
+
+                entity.HasKey(quota => quota.UserId);
+
+                entity.Property(quota => quota.UserId)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(quota => quota.Limit)
+                    .IsRequired();
+
+                entity.Property(quota => quota.ReservedQuantity)
+                    .IsRequired();
+
+                entity.Property(quota => quota.PurchasedQuantity)
+                    .IsRequired();
             });
         }
     }
