@@ -94,6 +94,12 @@ namespace MaskMap.Api.Domains
                     "The user does not have enough quota for this reservation.");
             }
 
+            // Current implementation reads a tracked Inventory row and updates it later in
+            // SaveChanges. Under Serializable, concurrent requests can all retain shared
+            // locks on the same hot row and then deadlock while converting them to exclusive
+            // locks. Two alternative fixes are maintained for comparison:
+            // - CreateReservationSolusion/UseCas uses one conditional atomic UPDATE.
+            // - CreateReservationSolusion/UseUpdlock takes UPDLOCK while reading the row.
             var inventory = await _db.Inventories.SingleOrDefaultAsync(
                 item => item.PharmacyId == pharmacyId && item.ProductId == productId,
                 cancellationToken);
