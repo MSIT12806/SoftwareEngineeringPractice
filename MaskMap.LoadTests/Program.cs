@@ -15,6 +15,7 @@ var stock = ReadPositiveInt("MASKMAP_STOCK", defaultStock);
 var requestsPerSecond = ReadPositiveInt(
     "MASKMAP_REQUESTS_PER_SECOND",
     defaultRequestsPerSecond);
+var capacityStrategy = ReadCapacityStrategy();
 
 if (stock > contenderCount)
 {
@@ -38,7 +39,8 @@ Console.WriteLine($"Starting MaskMap.Api at {baseUrl}...");
 using var apiProcess = ManagedApiProcess.Start(
     repositoryRoot,
     baseUrl,
-    connectionString);
+    connectionString,
+    capacityStrategy);
 
 using var httpClient = new HttpClient
 {
@@ -58,7 +60,9 @@ var created = 0;
 var inventoryInsufficient = 0;
 var unexpected = 0;
 
-var scenario = Scenario.Create("last_inventory_competition", async _ =>
+var scenario = Scenario.Create(
+    $"last_inventory_competition_{capacityStrategy.ToLowerInvariant()}",
+    async _ =>
     {
         var contenderNumber = Interlocked.Increment(ref issuedRequests);
         if (contenderNumber > contenderCount)
@@ -120,7 +124,7 @@ var scenario = Scenario.Create("last_inventory_competition", async _ =>
 NBomberRunner
     .RegisterScenarios(scenario)
     .WithTestSuite("MaskMap")
-    .WithTestName("Last inventory competition")
+    .WithTestName($"Last inventory competition - {capacityStrategy}")
     .Run();
 
 var finalState = await httpClient.GetFromJsonAsync<CompetitionState>(
@@ -146,7 +150,7 @@ if (failures.Count > 0)
 }
 
 Console.WriteLine(
-    $"PASS: {contenderCount} contenders competed for {stock} items; " +
+    $"PASS ({capacityStrategy}): {contenderCount} contenders competed for {stock} items; " +
     $"exactly {created} reservations succeeded and no inventory was oversold.");
 
 static int ReadPositiveInt(string name, int defaultValue)
@@ -163,6 +167,23 @@ static int ReadPositiveInt(string name, int defaultValue)
     }
 
     return value;
+}
+
+static string ReadCapacityStrategy()
+{
+    var strategy = Environment.GetEnvironmentVariable(
+        "MASKMAP_RESERVATION_CAPACITY_STRATEGY") ?? "Cas";
+
+    if (!strategy.Equals("Cas", StringComparison.OrdinalIgnoreCase) &&
+        !strategy.Equals("Updlock", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException(
+            "MASKMAP_RESERVATION_CAPACITY_STRATEGY must be 'Cas' or 'Updlock'.");
+    }
+
+    return strategy.Equals("Cas", StringComparison.OrdinalIgnoreCase)
+        ? "Cas"
+        : "Updlock";
 }
 
 static string FindRepositoryRoot()
@@ -292,7 +313,8 @@ internal sealed class ManagedApiProcess : IDisposable
     public static ManagedApiProcess Start(
         string repositoryRoot,
         string baseUrl,
-        string connectionString)
+        string connectionString,
+        string capacityStrategy)
     {
 #if DEBUG
         const string configuration = "Debug";
@@ -328,6 +350,7 @@ internal sealed class ManagedApiProcess : IDisposable
         startInfo.ArgumentList.Add(baseUrl);
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
         startInfo.Environment["ConnectionStrings__DefaultConnection"] = connectionString;
+        startInfo.Environment["ReservationCapacity__Strategy"] = capacityStrategy;
 
         var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start MaskMap.Api.");

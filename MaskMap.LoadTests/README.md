@@ -23,6 +23,10 @@ Docker must be running. The load-test runner then performs the complete lifecycl
 Run the self-contained scenario with one command:
 
 ```powershell
+$env:MASKMAP_RESERVATION_CAPACITY_STRATEGY = "Cas"
+dotnet run --project .\MaskMap.LoadTests\MaskMap.LoadTests.csproj -c Release
+
+$env:MASKMAP_RESERVATION_CAPACITY_STRATEGY = "Updlock"
 dotnet run --project .\MaskMap.LoadTests\MaskMap.LoadTests.csproj -c Release
 ```
 
@@ -32,6 +36,7 @@ Optional environment variables:
 $env:MASKMAP_CONTENDER_COUNT = "10000"
 $env:MASKMAP_STOCK = "100"
 $env:MASKMAP_REQUESTS_PER_SECOND = "1000"
+$env:MASKMAP_RESERVATION_CAPACITY_STRATEGY = "Cas" # Cas or Updlock
 ```
 
 The preparation and verification endpoints are intentionally available only in the

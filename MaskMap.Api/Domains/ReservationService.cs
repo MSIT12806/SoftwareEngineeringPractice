@@ -6,10 +6,14 @@ namespace MaskMap.Api.Domains
     public sealed class ReservationService
     {
         private readonly AppDbContext _db;
+        private readonly IReservationCapacityClaimer _capacityClaimer;
 
-        public ReservationService(AppDbContext db)
+        public ReservationService(
+            AppDbContext db,
+            IReservationCapacityClaimer capacityClaimer)
         {
             _db = db;
+            _capacityClaimer = capacityClaimer;
         }
 
         public Task<Reservation?> GetByIdAsync(string id, CancellationToken cancellationToken)
@@ -18,7 +22,7 @@ namespace MaskMap.Api.Domains
                 .AsNoTracking()
                 .SingleOrDefaultAsync(
                     reservation => reservation.ReservationId == id,
-                cancellationToken);
+                    cancellationToken);
         }
 
         public Task<List<Reservation>> GetForUserAsync(
@@ -57,7 +61,7 @@ namespace MaskMap.Api.Domains
             }
 
             await using var transaction = await _db.Database.BeginTransactionAsync(
-                IsolationLevel.Serializable,
+                IsolationLevel.ReadCommitted,
                 cancellationToken);
 
             var existingOperation = await _db.ReservationOperations
@@ -82,40 +86,28 @@ namespace MaskMap.Api.Domains
                     cancellationToken);
             }
 
-            var quota = await _db.UserQuotas.SingleOrDefaultAsync(
-                item => item.UserId == userId,
+            var now = DateTimeOffset.UtcNow;
+            var capacityResult = await _capacityClaimer.TryClaimAsync(
+                userId,
+                pharmacyId,
+                productId,
+                quantity,
+                now,
                 cancellationToken);
 
-            if (quota is null ||
-                quota.Limit - quota.ReservedQuantity - quota.PurchasedQuantity < quantity)
+            if (capacityResult == ReservationCapacityClaimResult.QuotaExceeded)
             {
                 throw new ReservationConflictException(
                     "QuotaExceeded",
                     "The user does not have enough quota for this reservation.");
             }
 
-            // Current implementation reads a tracked Inventory row and updates it later in
-            // SaveChanges. Under Serializable, concurrent requests can all retain shared
-            // locks on the same hot row and then deadlock while converting them to exclusive
-            // locks. Two alternative fixes are maintained for comparison:
-            // - CreateReservationSolusion/UseCas uses one conditional atomic UPDATE.
-            // - CreateReservationSolusion/UseUpdlock takes UPDLOCK while reading the row.
-            var inventory = await _db.Inventories.SingleOrDefaultAsync(
-                item => item.PharmacyId == pharmacyId && item.ProductId == productId,
-                cancellationToken);
-
-            if (inventory is null || inventory.AvailableQuantity < quantity)
+            if (capacityResult == ReservationCapacityClaimResult.InventoryInsufficient)
             {
                 throw new ReservationConflictException(
                     "InventoryInsufficient",
                     "The pharmacy does not have enough inventory for this reservation.");
             }
-
-            var now = DateTimeOffset.UtcNow;
-            inventory.AvailableQuantity -= quantity;
-            inventory.ReservedQuantity += quantity;
-            inventory.LastUpdatedAt = now;
-            quota.ReservedQuantity += quantity;
 
             var reservation = new Reservation
             {

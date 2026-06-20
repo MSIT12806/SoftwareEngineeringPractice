@@ -1,5 +1,6 @@
 using MaskMap.Api;
 using MaskMap.Api.Domains;
+using MaskMap.Api.Infrastructure.Reservations;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,6 +14,24 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 builder.Services.AddScoped<IDb>(provider => provider.GetRequiredService<AppDbContext>());
+var capacityStrategy = builder.Configuration["ReservationCapacity:Strategy"] ?? "Cas";
+if (capacityStrategy.Equals("Cas", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddScoped<
+        IReservationCapacityClaimer,
+        AtomicUpdateReservationCapacityClaimer>();
+}
+else if (capacityStrategy.Equals("Updlock", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddScoped<
+        IReservationCapacityClaimer,
+        UpdlockReservationCapacityClaimer>();
+}
+else
+{
+    throw new InvalidOperationException(
+        $"Unknown ReservationCapacity:Strategy '{capacityStrategy}'. Use 'Cas' or 'Updlock'.");
+}
 builder.Services.AddScoped<ReservationService>();
 builder.Services.AddScoped<InventoryQueryHandler>();
 builder.Services.AddControllers();
