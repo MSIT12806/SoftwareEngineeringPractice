@@ -175,15 +175,22 @@ static string ReadCapacityStrategy()
         "MASKMAP_RESERVATION_CAPACITY_STRATEGY") ?? "Cas";
 
     if (!strategy.Equals("Cas", StringComparison.OrdinalIgnoreCase) &&
-        !strategy.Equals("Updlock", StringComparison.OrdinalIgnoreCase))
+        !strategy.Equals("Updlock", StringComparison.OrdinalIgnoreCase) &&
+        !strategy.Equals("Aggregate", StringComparison.OrdinalIgnoreCase))
     {
         throw new InvalidOperationException(
-            "MASKMAP_RESERVATION_CAPACITY_STRATEGY must be 'Cas' or 'Updlock'.");
+            "MASKMAP_RESERVATION_CAPACITY_STRATEGY must be " +
+            "'Cas', 'Updlock', or 'Aggregate'.");
     }
 
-    return strategy.Equals("Cas", StringComparison.OrdinalIgnoreCase)
-        ? "Cas"
-        : "Updlock";
+    if (strategy.Equals("Cas", StringComparison.OrdinalIgnoreCase))
+    {
+        return "Cas";
+    }
+
+    return strategy.Equals("Updlock", StringComparison.OrdinalIgnoreCase)
+        ? "Updlock"
+        : "Aggregate";
 }
 
 static string FindRepositoryRoot()

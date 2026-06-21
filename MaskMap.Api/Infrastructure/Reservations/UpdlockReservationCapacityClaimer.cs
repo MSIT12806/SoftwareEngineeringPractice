@@ -23,7 +23,8 @@ public sealed class UpdlockReservationCapacityClaimer
     {
         var quota = await _db.UserQuotas
             .FromSqlInterpolated($$"""
-                SELECT [UserId], [Limit], [ReservedQuantity], [PurchasedQuantity]
+                SELECT [UserId], [Limit], [ReservedQuantity], [PurchasedQuantity],
+                       [RowVersion]
                 FROM [UserQuotas] WITH (UPDLOCK)
                 WHERE [UserId] = {{userId}}
                 """)
@@ -38,7 +39,8 @@ public sealed class UpdlockReservationCapacityClaimer
         var inventory = await _db.Inventories
             .FromSqlInterpolated($$"""
                 SELECT [PharmacyId], [ProductId], [AvailableQuantity],
-                       [ReservedQuantity], [PhysicalQuantity], [LastUpdatedAt]
+                       [ReservedQuantity], [PhysicalQuantity], [LastUpdatedAt],
+                       [RowVersion]
                 FROM [Inventories] WITH (UPDLOCK)
                 WHERE [PharmacyId] = {{pharmacyId}}
                   AND [ProductId] = {{productId}}
@@ -54,6 +56,8 @@ public sealed class UpdlockReservationCapacityClaimer
         inventory.AvailableQuantity -= quantity;
         inventory.ReservedQuantity += quantity;
         inventory.LastUpdatedAt = occurredAt;
+
+        await _db.SaveChangesAsync(cancellationToken);
 
         return ReservationCapacityClaimResult.Succeeded;
     }

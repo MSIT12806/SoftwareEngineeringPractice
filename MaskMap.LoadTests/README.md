@@ -28,6 +28,9 @@ dotnet run --project .\MaskMap.LoadTests\MaskMap.LoadTests.csproj -c Release
 
 $env:MASKMAP_RESERVATION_CAPACITY_STRATEGY = "Updlock"
 dotnet run --project .\MaskMap.LoadTests\MaskMap.LoadTests.csproj -c Release
+
+$env:MASKMAP_RESERVATION_CAPACITY_STRATEGY = "Aggregate"
+dotnet run --project .\MaskMap.LoadTests\MaskMap.LoadTests.csproj -c Release
 ```
 
 Optional environment variables:
@@ -36,7 +39,7 @@ Optional environment variables:
 $env:MASKMAP_CONTENDER_COUNT = "10000"
 $env:MASKMAP_STOCK = "100"
 $env:MASKMAP_REQUESTS_PER_SECOND = "1000"
-$env:MASKMAP_RESERVATION_CAPACITY_STRATEGY = "Cas" # Cas or Updlock
+$env:MASKMAP_RESERVATION_CAPACITY_STRATEGY = "Cas" # Cas, Updlock, or Aggregate
 ```
 
 The preparation and verification endpoints are intentionally available only in the

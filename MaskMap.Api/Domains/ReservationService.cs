@@ -5,6 +5,7 @@ namespace MaskMap.Api.Domains
 {
     public sealed class ReservationService
     {
+        private const int MaximumConcurrencyAttempts = 128;
         private readonly AppDbContext _db;
         private readonly IReservationCapacityClaimer _capacityClaimer;
 
@@ -60,6 +61,40 @@ namespace MaskMap.Api.Domains
                 throw new ArgumentException("Idempotency key is required.", nameof(idempotencyKey));
             }
 
+            for (var attempt = 1; attempt <= MaximumConcurrencyAttempts; attempt++)
+            {
+                try
+                {
+                    return await CreateOnceAsync(
+                        userId,
+                        idempotencyKey,
+                        pharmacyId,
+                        productId,
+                        quantity,
+                        cancellationToken);
+                }
+                catch (DbUpdateConcurrencyException) when (
+                    attempt < MaximumConcurrencyAttempts)
+                {
+                    _db.ChangeTracker.Clear();
+                    await Task.Delay(
+                        Random.Shared.Next(1, Math.Min(attempt + 2, 16)),
+                        cancellationToken);
+                }
+            }
+
+            throw new DbUpdateConcurrencyException(
+                $"Reservation still conflicted after {MaximumConcurrencyAttempts} attempts.");
+        }
+
+        private async Task<Reservation> CreateOnceAsync(
+            string userId,
+            string idempotencyKey,
+            string pharmacyId,
+            string productId,
+            int quantity,
+            CancellationToken cancellationToken)
+        {
             await using var transaction = await _db.Database.BeginTransactionAsync(
                 IsolationLevel.ReadCommitted,
                 cancellationToken);

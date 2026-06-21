@@ -27,10 +27,17 @@ else if (capacityStrategy.Equals("Updlock", StringComparison.OrdinalIgnoreCase))
         IReservationCapacityClaimer,
         UpdlockReservationCapacityClaimer>();
 }
+else if (capacityStrategy.Equals("Aggregate", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddScoped<
+        IReservationCapacityClaimer,
+        AggregateReservationCapacityClaimer>();
+}
 else
 {
     throw new InvalidOperationException(
-        $"Unknown ReservationCapacity:Strategy '{capacityStrategy}'. Use 'Cas' or 'Updlock'.");
+        $"Unknown ReservationCapacity:Strategy '{capacityStrategy}'. " +
+        "Use 'Cas', 'Updlock', or 'Aggregate'.");
 }
 builder.Services.AddScoped<ReservationService>();
 builder.Services.AddScoped<InventoryQueryHandler>();

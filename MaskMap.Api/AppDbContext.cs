@@ -91,6 +91,9 @@ namespace MaskMap.Api
                 entity.Property(inventory => inventory.LastUpdatedAt)
                     .IsRequired();
 
+                entity.Property(inventory => inventory.RowVersion)
+                    .IsRowVersion();
+
                 entity.HasOne<Pharmacy>()
                     .WithMany()
                     .HasForeignKey(inventory => inventory.PharmacyId)
@@ -182,6 +185,9 @@ namespace MaskMap.Api
 
                 entity.Property(quota => quota.PurchasedQuantity)
                     .IsRequired();
+
+                entity.Property(quota => quota.RowVersion)
+                    .IsRowVersion();
             });
 
             modelBuilder.Entity<ReservationOperation>(entity =>
